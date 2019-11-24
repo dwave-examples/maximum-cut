@@ -59,6 +59,14 @@ In the code, we create this Q matrix as a dictionary iteratively, looping over t
 
 There are two parameters to be set by the user in this code:  chain strength and number of reads.  Since this is a small problem, we set a low number of reads (shown on line 43 with ``numruns = 10``).  For chain strength, we examine the entries in our Q matrix and choose a relatively large number to enforce chains in our embedding.  For this problem, our matrix entries range from -3 to +2 and so a value of 8 is chosen on line 42 ``chainstrength``.
 
+Ising Formulation
+-----------------
+For this demo we also provide the file `maximum_cut_ising.py`, which implements the Ising form of this problem.  
+
+To run the demo, type:
+::
+  python maximum_cut_ising.py
+
 References
 ----------
 Dunning, Iain, Swati Gupta, and John Silberholz. "What works best when? A systematic evaluation of heuristics for Max-Cut and QUBO." INFORMS Journal on Computing 30.3 (2018): 608-624.
