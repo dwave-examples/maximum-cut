@@ -14,8 +14,8 @@ We will run the maximum cut problem on the network shown above to find the best 
 
 Usage
 -----
-To run the demo, type:
-::
+To run the demo, type::
+
   python maximum_cut.py
 
 After running, output will be printed to the command line that provides a list of nodes in each set (labeled sets S0 and S1), the energy corresponding to the given solution, and the cut size of the given solution.
@@ -65,4 +65,4 @@ Dunning, Iain, Swati Gupta, and John Silberholz. "What works best when? A system
 
 License
 -------
-Released under the Apache License 2.0. See `LICENSE <../LICENSE>`_ file.
+Released under the Apache License 2.0. See `LICENSE <./LICENSE>`_ file.
