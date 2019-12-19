@@ -1,5 +1,6 @@
-Maximum Cut Demo
-================
+===========
+Maximum Cut
+===========
 In this demo, we explore the maximum cut problem.  This problem has a wide variety of real-world applications.  
 
 For example, suppose that we have a set of different computers, each with different types of connections.  Some computers have bluetooth, some have USB ports, HDMI ports, etc.  We want to split our set of computers into two groups for two different projects, but it's very important that the two groups can connect to each other.  The problem is sometimes the wires and connections don't work!  How can we be sure that we have the best chance at remaining connected?
