@@ -45,14 +45,19 @@ numruns = 10
 # Run the QUBO on the solver from your config file
 sampler = EmbeddingComposite(DWaveSampler())
 response = sampler.sample_qubo(Q, chain_strength=chainstrength, num_reads=numruns)
-energies = iter(response.data())
 
 # ------- Return results to user -------
 print('-' * 60)
 print('{:>15s}{:>15s}{:^15s}{:^15s}'.format('Set 0','Set 1','Energy','Cut Size'))
 print('-' * 60)
+
+E = iter(response.data())
+
 for line in response:
-    S0 = (k for k,v in line.items() if v == 0)
-    S1 = (k for k,v in line.items() if v == 1)
-    E = next(energies).energy
-    print('{:>15s}{:>15s}{:^15s}{:^15s}'.format(str(S0),str(S1),str(E),str(int(-1*E))))
+    data = next(E)
+    S = data.sample
+    en = data.energy
+    S1 = [i for i in S if S[i] > 0]
+    S0 = [i for i in S if S[i] < 1]
+    
+    print('{:>15s}{:>15s}{:^15s}{:^15s}'.format(str(S0),str(S1),str(en),str(int(-1*en))))
