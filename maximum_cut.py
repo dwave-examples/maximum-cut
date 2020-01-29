@@ -43,7 +43,7 @@ chainstrength = 8
 numruns = 10
 
 # Run the QUBO on the solver from your config file
-sampler = EmbeddingComposite(DWaveSampler())
+sampler = EmbeddingComposite(DWaveSampler(solver={'qpu': True}))
 response = sampler.sample_qubo(Q, chain_strength=chainstrength, num_reads=numruns)
 energies = iter(response.data())
 
