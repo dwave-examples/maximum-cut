@@ -83,3 +83,4 @@ nx.draw_networkx_labels(G, pos)
 
 filename = "maxcut_plot.png"
 plt.savefig(filename, bbox_inches='tight')
+print("\nYour plot is saved to {}".format(filename))
