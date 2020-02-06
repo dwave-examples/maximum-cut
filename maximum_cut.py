@@ -13,10 +13,12 @@
 # limitations under the License.
 
 # ------ Import necessary packages ----
-import networkx as nx
 from collections import defaultdict
+
 from dwave.system.samplers import DWaveSampler
 from dwave.system.composites import EmbeddingComposite
+from matplotlib import pyplot as plt
+import networkx as nx
 
 # ------- Set up our graph -------
 
@@ -47,7 +49,7 @@ sampler = EmbeddingComposite(DWaveSampler(solver={'qpu': True}))
 response = sampler.sample_qubo(Q, chain_strength=chainstrength, num_reads=numruns)
 energies = iter(response.data())
 
-# ------- Return results to user -------
+# ------- Print results to user -------
 print('-' * 60)
 print('{:>15s}{:>15s}{:^15s}{:^15s}'.format('Set 0','Set 1','Energy','Cut Size'))
 print('-' * 60)
@@ -56,3 +58,25 @@ for line in response:
     S1 = [k for k,v in line.items() if v == 1]
     E = next(energies).energy
     print('{:>15s}{:>15s}{:^15s}{:^15s}'.format(str(S0),str(S1),str(E),str(int(-1*E))))
+
+# ------- Display results to user -------
+# Grab best result
+# Note: "best" result is the result with the lowest energy
+lut = response.lowest().first.sample   # look up table (lut) on best result values
+
+# Interpret best result in terms of nodes and edges
+S0 = [node for node in G.nodes if not lut[node]]
+S1 = [node for node in G.nodes if lut[node]]
+cut_edges = [(u, v) for u, v in G.edges if lut[u]!=lut[v]]
+uncut_edges = [(u, v) for u, v in G.edges if lut[u]==lut[v]]
+
+# Display best result
+pos = nx.spring_layout(G)
+nx.draw_networkx_nodes(G, pos, nodelist=S0, node_color='r')
+nx.draw_networkx_nodes(G, pos, nodelist=S1, node_color='c')
+nx.draw_networkx_edges(G, pos, edgelist=cut_edges, style='dashed', width=1)
+nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, style='solid', width=1)
+nx.draw_networkx_labels(G, pos)
+
+filename = "pipelines_plot_solution.png"
+plt.savefig(filename, bbox_inches='tight')
