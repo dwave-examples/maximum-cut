@@ -81,5 +81,5 @@ nx.draw_networkx_edges(G, pos, edgelist=cut_edges, style='dashdot', alpha=0.5, w
 nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, style='solid', width=3)
 nx.draw_networkx_labels(G, pos)
 
-filename = "maxcut_plot_solution.png"
+filename = "maxcut_plot.png"
 plt.savefig(filename, bbox_inches='tight')
