@@ -39,7 +39,8 @@ To run the demo, type::
 
 After running, output will be printed to the command line that provides a list
 of nodes in each set (labeled sets S0 and S1), the energy corresponding to the
-given solution, and the cut size of the given solution.
+given solution, and the cut size of the given solution. In addition, there will
+be a visual of the lowest energy solution stored in ``maxcut_plot.png``.
 
 Code Overview
 -------------
