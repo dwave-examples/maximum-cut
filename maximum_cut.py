@@ -62,7 +62,10 @@ for line in response:
 # ------- Display results to user -------
 # Grab best result
 # Note: "best" result is the result with the lowest energy
-lut = response.lowest().first.sample   # look up table (lut) on best result values
+# Note2: the look up table (lut) is a dictionary, where the key is the node index
+#   and the value is the set label. For example, lut[5] = 1, indicates that
+#   node 5 is in set 1 (S1).
+lut = response.lowest().first.sample
 
 # Interpret best result in terms of nodes and edges
 S0 = [node for node in G.nodes if not lut[node]]
@@ -74,9 +77,9 @@ uncut_edges = [(u, v) for u, v in G.edges if lut[u]==lut[v]]
 pos = nx.spring_layout(G)
 nx.draw_networkx_nodes(G, pos, nodelist=S0, node_color='r')
 nx.draw_networkx_nodes(G, pos, nodelist=S1, node_color='c')
-nx.draw_networkx_edges(G, pos, edgelist=cut_edges, style='dashed', width=1)
-nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, style='solid', width=1)
+nx.draw_networkx_edges(G, pos, edgelist=cut_edges, style='dashdot', alpha=0.5, width=3)
+nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, style='solid', width=3)
 nx.draw_networkx_labels(G, pos)
 
-filename = "pipelines_plot_solution.png"
+filename = "maxcut_plot_solution.png"
 plt.savefig(filename, bbox_inches='tight')
