@@ -13,10 +13,12 @@
 # limitations under the License.
 
 # ------ Import necessary packages ----
-import networkx as nx
 from collections import defaultdict
+
 from dwave.system.samplers import DWaveSampler
 from dwave.system.composites import EmbeddingComposite
+from matplotlib import pyplot as plt
+import networkx as nx
 
 # ------- Set up our graph -------
 
@@ -46,7 +48,7 @@ sampler = EmbeddingComposite(DWaveSampler())
 response = sampler.sample_ising(h, J, chain_strength=chainstrength, num_reads=numruns)
 energies = iter(response.data())
 
-# ------- Return results to user -------
+# ------- Print results to user -------
 print('-' * 60)
 print('{:>15s}{:>15s}{:^15s}{:^15s}'.format('Set 0','Set 1','Energy','Cut Size'))
 print('-' * 60)
@@ -55,3 +57,29 @@ for line in response:
     S1 = [k for k,v in line.items() if v == 1]
     E = next(energies).energy
     print('{:>15s}{:>15s}{:^15s}{:^15s}'.format(str(S0),str(S1),str(E),str(int((6-E)/2))))
+
+# ------- Display results to user -------
+# Grab best result
+# Note: "best" result is the result with the lowest energy
+# Note2: the look up table (lut) is a dictionary, where the key is the node index
+#   and the value is the set label. For example, lut[5] = 1, indicates that
+#   node 5 is in set 1 (S1).
+lut = response.lowest().first.sample
+
+# Interpret best result in terms of nodes and edges
+S0 = [node for node in G.nodes if lut[node]==-1]
+S1 = [node for node in G.nodes if lut[node]==1]
+cut_edges = [(u, v) for u, v in G.edges if lut[u]!=lut[v]]
+uncut_edges = [(u, v) for u, v in G.edges if lut[u]==lut[v]]
+
+# Display best result
+pos = nx.spring_layout(G)
+nx.draw_networkx_nodes(G, pos, nodelist=S0, node_color='r')
+nx.draw_networkx_nodes(G, pos, nodelist=S1, node_color='c')
+nx.draw_networkx_edges(G, pos, edgelist=cut_edges, style='dashdot', alpha=0.5, width=3)
+nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, style='solid', width=3)
+nx.draw_networkx_labels(G, pos)
+
+filename = "maxcut_plot_ising.png"
+plt.savefig(filename, bbox_inches='tight')
+print("\nYour plot is saved to {}".format(filename))
