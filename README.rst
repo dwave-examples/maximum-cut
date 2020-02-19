@@ -1,3 +1,7 @@
+.. image:: https://circleci.com/gh/dwave-examples/maximum-cut.svg?style=svg
+    :target: https://circleci.com/gh/dwave-examples/maximum-cut
+    :alt: Linux/Mac/Windows build status
+
 ===========
 Maximum Cut
 ===========
