@@ -47,13 +47,6 @@ jobs:
     docker:
       - image: circleci/python:3.5-jessie
 
-  test-py27:
-    # Note: CircleCI's Python 2.7 environment already has virtualenv pre-installed.
-    #   Hence, even though it's Python 2.7, `python -m virtualenv ..` works.
-    <<: *full-test-template
-    docker:
-      - image: circleci/python:2.7-jessie
-
   #
   # macOS
   #
@@ -119,13 +112,6 @@ jobs:
     <<: *osx-tests-template
     environment:
       PYTHON: 3.5.5
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      BASH_ENV: /Users/distiller/repo/.circleci/.bashrc_macOS
-
-  test-osx-py27:
-    <<: *osx-tests-template
-    environment:
-      PYTHON: 2.7.15
       HOMEBREW_NO_AUTO_UPDATE: 1
       BASH_ENV: /Users/distiller/repo/.circleci/.bashrc_macOS
 
@@ -264,22 +250,23 @@ jobs:
       PYTHON: 3.5.4
 
 
-# TODO: add Py3.8 in jobs once ortools (for penaltymodel-mip) supports Py3.8
 workflows:
   version: 2.1
   tests:
     jobs:
+      - test-py38
       - test-py37
       - test-py36
       - test-py35
-      - test-py27
+      - test-osx-py38
       - test-osx-py37
       - test-osx-py36
       - test-osx-py35
-      - test-osx-py27
+      - test-win-py38
       - test-win-py37
       - test-win-py36
       - test-win-py35
+      - test-win-py38x86
       - test-win-py37x86
       - test-win-py36x86
       - test-win-py35x86
