@@ -30,10 +30,7 @@ jobs:
           paths:
             - env
 
-      - run:
-          command: |
-            . env/bin/activate
-            coverage run -m unittest discover
+      - run: env/bin/coverage run -m unittest discover
 
   test-py37:
     <<: *full-test-template
