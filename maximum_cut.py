@@ -17,8 +17,11 @@ from collections import defaultdict
 
 from dwave.system.samplers import DWaveSampler
 from dwave.system.composites import EmbeddingComposite
-from matplotlib import pyplot as plt
 import networkx as nx
+
+import matplotlib
+matplotlib.use("agg")
+from matplotlib import pyplot as plt
 
 # ------- Set up our graph -------
 
