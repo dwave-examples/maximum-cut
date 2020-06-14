@@ -35,8 +35,8 @@ h = defaultdict(int)
 J = defaultdict(int)
 
 # Update J matrix for every edge in the graph
-for u, v in G.edges:
-    J[(u,v)]+= 1
+for i, j in G.edges:
+    J[(i,j)]+= 1
 
 # ------- Run our QUBO on the QPU -------
 # Set up QPU parameters
