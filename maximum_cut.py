@@ -37,10 +37,10 @@ G.add_edges_from([(1,2),(1,3),(2,4),(3,4),(3,5),(4,5)])
 Q = defaultdict(int)
 
 # Update Q matrix for every edge in the graph
-for u, v in G.edges:
-    Q[(u,u)]+= -1
-    Q[(v,v)]+= -1
-    Q[(u,v)]+= 2
+for i, j in G.edges:
+    Q[(i,i)]+= -1
+    Q[(j,j)]+= -1
+    Q[(i,j)]+= 2
 
 # ------- Run our QUBO on the QPU -------
 # Set up QPU parameters

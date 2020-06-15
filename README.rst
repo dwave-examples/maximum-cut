@@ -101,10 +101,10 @@ the edges in our graph just as we see in the summation of our QUBO expression.
 
 There are two parameters to be set by the user in this code:  chain strength and
 number of reads.  Since this is a small problem, we set a low number of reads
-(shown on line 43 with ``numruns = 10``).  For chain strength, we examine the
+(shown with ``numruns = 10``).  For chain strength, we examine the
 entries in our Q matrix and choose a relatively large number to enforce chains
 in our embedding.  For this problem, our matrix entries range from -3 to +2 and
-so a value of 8 is chosen on line 42 ``chainstrength``.
+so a value of 8 is chosen for ``chainstrength``.
 
 Ising Formulation
 -----------------
