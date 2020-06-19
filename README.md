@@ -1,10 +1,9 @@
-.. image:: https://circleci.com/gh/dwave-examples/maximum-cut.svg?style=svg
-    :target: https://circleci.com/gh/dwave-examples/maximum-cut
-    :alt: Linux/Mac/Windows build status
+[![Linux/Mac/Windows build status](
+  https://circleci.com/gh/dwave-examples/maximum-cut.svg?style=svg)](
+  https://circleci.com/gh/dwave-examples/maximum-cut)
 
-===========
-Maximum Cut
-===========
+# Maximum Cut
+
 In this demo, we explore the maximum cut problem.  This problem has a wide
 variety of real-world applications.
 
@@ -30,24 +29,25 @@ Below we see a simple network of five nodes and three different ways to split
 the set of nodes into two groups.  The red edges in each graph highlight the cut
 edges.
 
-.. image:: readme_imgs/cut_examples.png
+![Cut examples](readme_imgs/cut_examples.png "Cut examples")
 
 We will run the maximum cut problem on the network shown above to find the best
 way to split the network into two groups to maximize the number of cut edges.
 
-Usage
------
-To run the demo, type::
+## Usage
 
-  python maximum_cut.py
+To run the demo, type:
+```bash
+python maximum_cut.py
+```
 
 After running, output will be printed to the command line that provides a list
 of nodes in each set (labeled sets S0 and S1), the energy corresponding to the
 given solution, and the cut size of the given solution. In addition, there will
-be a visual of the lowest energy solution stored in ``maxcut_plot.png``.
+be a visual of the lowest energy solution stored in `maxcut_plot.png`.
 
-Code Overview
--------------
+## Code Overview
+
 The code implements a QUBO formulation of this problem.
 
 The answer that we are looking for is a partition of the nodes in the graph, so
@@ -61,65 +61,65 @@ in the table below.  We only want to count an edge if the endpoints are in
 different subsets, and so we assign a 1 for the edge column in this case and a 0
 otherwise.
 
-=== === ==========
-x_i x_j edge (i,j)
---- --- ----------
-0   0   0
-0   1   1 
-1   0   1
-1   1   0
-=== === ==========
+| x_i   | x_j   | edge (i,j) |
+| :---: | :---: | :---------:|
+| 0     | 0     | 0          |
+| 0     | 1     | 1          |
+| 1     | 0     | 1          |
+| 1     | 1     | 0          |
 
 From this table, we see that we can use the expression x_i+x_j-2x_ix_j to
 calculate the edge column in our table.  Now for our entire graph, our objective
 function can be written as shown below, where the sum is over all edges in the
 graph.
 
-.. image:: readme_imgs/QUBO.png
+![QUBO](readme_imgs/QUBO.png "QUBO")
 
 Since our system is used to minimize an objective function, we must convert this
 maximization problem to a minimization problem by multiplying the expression by
 -1.  Our final QUBO expression is the following.
 
-.. image:: readme_imgs/final_QUBO.png
+![Final QUBO](readme_imgs/final_QUBO.png "Final QUBO")
 
 For the graph shown above, this QUBO results in the following Q matrix.  In the
 Q matrix (implemented as a dictionary using Ocean), we put the coefficients on
 the linear terms in our QUBO along the diagonal and the quadratic terms on the
 off-diagonal.
 
-=== === === === ===
--2  2   2   0   0
-0   -2  0   2   0    
-0   0   -3  2   2
-0   0   0   -3  2
-0   0   0   0   -2
-=== === === === ===
+|     | x_0 | x_1 | x_2 | x_3 | x_4 |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| x_0 | -2  | 2   | 2   | 0   | 0   |
+| x_1 | 0   | -2  | 0   | 2   | 0   |
+| x_2 | 0   | 0   | -3  | 2   | 2   |
+| x_3 | 0   | 0   | 0   | -3  | 2   |
+| x_4 | 0   | 0   | 0   | 0   | -2  |
 
 In the code, we create this Q matrix as a dictionary iteratively, looping over
 the edges in our graph just as we see in the summation of our QUBO expression.
 
 There are two parameters to be set by the user in this code:  chain strength and
 number of reads.  Since this is a small problem, we set a low number of reads
-(shown with ``numruns = 10``).  For chain strength, we examine the
+(shown with `numruns = 10`).  For chain strength, we examine the
 entries in our Q matrix and choose a relatively large number to enforce chains
 in our embedding.  For this problem, our matrix entries range from -3 to +2 and
-so a value of 8 is chosen for ``chainstrength``.
+so a value of 8 is chosen for `chainstrength`.
 
-Ising Formulation
------------------
-For this demo we also provide the file `maximum_cut_ising.py`, which implements the Ising form of this problem.  
+## Ising Formulation
+
+For this demo we also provide the file `maximum_cut_ising.py`, which implements
+the Ising form of this problem.
 
 To run the demo, type:
-::
-  python maximum_cut_ising.py
+```bash
+python maximum_cut_ising.py
+```
 
-References
-----------
+## References
+
 Dunning, Iain, Swati Gupta, and John Silberholz. "What works best when? A
 systematic evaluation of heuristics for Max-Cut and QUBO." INFORMS Journal on
 Computing 30.3 (2018): 608-624.
 
-License
--------
-Released under the Apache License 2.0. See `LICENSE <./LICENSE>`_ file.
+## License
+
+Released under the Apache License 2.0. See [LICENSE](./LICENSE) file.
