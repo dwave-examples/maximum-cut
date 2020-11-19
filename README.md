@@ -26,8 +26,8 @@ resilient network by providing many redundant connections between groups in case
 one connection fails.
 
 Below we see a simple network of five nodes and three different ways to split
-the set of nodes into two groups.  The red edges in each graph highlight the cut
-edges.
+the set of nodes into two groups.  The dashed edges in each graph highlight the
+cut edges.
 
 ![Cut examples](readme_imgs/cut_examples.png "Cut examples")
 
