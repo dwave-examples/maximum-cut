@@ -64,7 +64,7 @@ for line in response:
 # Note2: the look up table (lut) is a dictionary, where the key is the node index
 #   and the value is the set label. For example, lut[5] = 1, indicates that
 #   node 5 is in set 1 (S1).
-lut = response.lowest().first.sample
+lut = response.first.sample
 
 # Interpret best result in terms of nodes and edges
 S0 = [node for node in G.nodes if lut[node]==-1]
