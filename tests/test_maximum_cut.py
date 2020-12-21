@@ -41,3 +41,6 @@ class TestDemo(unittest.TestCase):
             self.assertNotIn("ERROR", output)
         with self.subTest(msg="Verify if warning string contains in output \n"):
             self.assertNotIn("WARNING", output)
+
+if __name__ == '__main__':
+    unittest.main()
