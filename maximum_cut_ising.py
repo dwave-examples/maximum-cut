@@ -45,7 +45,10 @@ numruns = 10
 
 # Run the QUBO on the solver from your config file
 sampler = EmbeddingComposite(DWaveSampler())
-response = sampler.sample_ising(h, J, chain_strength=chainstrength, num_reads=numruns)
+response = sampler.sample_ising(h, J,
+                                chain_strength=chainstrength,
+                                num_reads=numruns,
+                                label='Example - Maximum Cut Ising')
 energies = iter(response.data())
 
 # ------- Print results to user -------
