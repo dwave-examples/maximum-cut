@@ -58,20 +58,20 @@ The objective function that we are looking to optimize is maximizing the number
 of cut edges.  To count how many cut edges we have given a partition of the
 nodes (assignment of our binary variables), we consider a single edge in a graph
 in the table below.  We only want to count an edge if the endpoints are in
-different subsets, and so we assign a 1 for the edge column in this case and a 0
-otherwise.
+different subsets, and so we assign a 1 for the edge_score column in this case
+and a 0 otherwise.
 
-| x_i   | x_j   | edge (i,j) |
-| :---: | :---: | :---------:|
-| 0     | 0     | 0          |
-| 0     | 1     | 1          |
-| 1     | 0     | 1          |
-| 1     | 1     | 0          |
+| x_i   | x_j   | edge_score (i,j) |
+| :---: | :---: | :---------------:|
+| 0     | 0     | 0                |
+| 0     | 1     | 1                |
+| 1     | 0     | 1                |
+| 1     | 1     | 0                |
 
 From this table, we see that we can use the expression x_i+x_j-2x_ix_j to
-calculate the edge column in our table.  Now for our entire graph, our objective
-function can be written as shown below, where the sum is over all edges in the
-graph.
+calculate the edge_score column in our table.  Now for our entire graph, our
+objective function can be written as shown below, where the sum is over all
+edges in the graph.
 
 ![QUBO](readme_imgs/QUBO.png "QUBO")
 
