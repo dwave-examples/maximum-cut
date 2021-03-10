@@ -49,16 +49,14 @@ response = sampler.sample_ising(h, J,
                                 chain_strength=chainstrength,
                                 num_reads=numruns,
                                 label='Example - Maximum Cut Ising')
-energies = iter(response.data())
 
 # ------- Print results to user -------
 print('-' * 60)
 print('{:>15s}{:>15s}{:^15s}{:^15s}'.format('Set 0','Set 1','Energy','Cut Size'))
 print('-' * 60)
-for line in response:
-    S0 = [k for k,v in line.items() if v == -1]
-    S1 = [k for k,v in line.items() if v == 1]
-    E = next(energies).energy
+for sample, E in response.data(fields=['sample','energy']):
+    S0 = [k for k,v in sample.items() if v == -1]
+    S1 = [k for k,v in sample.items() if v == 1]
     print('{:>15s}{:>15s}{:^15s}{:^15s}'.format(str(S0),str(S1),str(E),str(int((6-E)/2))))
 
 # ------- Display results to user -------
