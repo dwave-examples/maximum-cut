@@ -1,0 +1,489 @@
+'''
+多波段不同优化目标：均考虑信噪比约束
+【最短路径，不考虑占用频隙数目】：MBRSA_sp
+【最小化占用频隙数目，不考虑路径长度】：MBRSA_fmin
+【最小化占用频隙数目，考虑最短路径】：MBRSA_fmin_sp
+【最小化占用频隙数目，考虑时延约束（路径）】：MBRSA_fmin_delay
+
+'''
+
+import kaiwu as kw
+from tool import *
+from SNR_calculate import *
+from resvisual import resvisual
+from writedocx import write_docx
+import math
+
+def MBRSA_sp(s, t, fs_N, edge_list, w, n, f_list, fdict, flength, launch_power):
+    # 构建头、尾函数，即点i为头、尾的边的列表
+    def head(v):
+        return [(i, j) for (i, j) in edge_list if j == v]
+
+    def tail(u):
+        return [(i, j) for (i, j) in edge_list if i == u]
+
+    # 创建qubo变量矩阵
+    x = kw.qubo.qubo_dict(edge_list, 'x', kw.qubo.binary)
+    f = kw.qubo.qubo_dict(f_list, 'f', kw.qubo.binary)
+    # s的流平衡约束
+    H_s = (kw.qubo.sum(x[e] for e in tail(s)) - kw.qubo.sum(x[e] for e in head(s)) - 1) ** 2
+    # t的流平衡约束
+    H_t = (kw.qubo.sum(x[e] for e in tail(t)) - kw.qubo.sum(x[e] for e in head(t)) + 1) ** 2
+    # 其余点的流平衡约束
+    H_i = kw.qubo.sum(
+        (kw.qubo.sum(x[e] for e in tail(i)) - kw.qubo.sum(x[e] for e in head(i))) ** 2 for i in range(n) if
+        i not in [s, t])
+    # 频隙约束 函数range左闭右开
+    H_f = kw.qubo.sum(x[e] * fdict[e][m] * f[k, k] for i in range(n) for e in tail(i) for k in range(flength) for m in
+                      range(k, k + fs_N))
+    H_fn = (kw.qubo.sum(f[k, k] for k in range(flength)) - 1) ** 2
+    # 路径长度
+    H_c = kw.qubo.sum(w[e] * x[e] for e in edge_list)
+
+    # 信噪比约束 需求d所选路径的snr_d>=snr_t(信噪比阈值)，snr_d=P/P_noise
+    '''为将上述不等式QUBO建模，引入松弛变量slack_value，取值范围0~snr_t
+          先将slack_value取定值，后续需要引入二进制变量x代换，注意：需要将功率P和信噪比阈值snr_t，由数值形式转化为dB
+          暂时当slack_value取定值时，以数值形式表示
+    '''
+    # 信噪比阈值，发射功率P
+    '''BPSK调制格式m=1、BER=10E-3时，对应信噪比阈值为9dB，即snr=10log10(8)=9dB；
+       16QAM调制格式m=4、BER=10E-3时，对应信噪比阈值为18.6dB，即snr=10log10(72.443596)=18.6dB；'''
+    snr_t = 72.443596  # BPSK为8,9dB,16QAM 72.443596,18.6dB
+    # launch_power = 0.001  # 单位是w，0.001对应0dBm，0.177827941对应-7.5dBm,4dBm,2.5mw
+    P = launch_power
+    slack_value = 0.0001
+
+    # 噪声功率P_noise计算
+    # 参数设置
+    f_start = 196.04  # 从L波段的最高频率开始选，C波段，C波段频率范围：195.9~191.6，L波段频率范围：191.6~184.5（THz）待考证
+    nsp = 1.5  # 自发辐射系数 C波段1.25，L波段1.99
+    h = 6.626e-34  # Planck's constant
+    alpha = 0.2 / 4.3  # 光纤衰减系数 fiber attenuation(dB/km) 0.2/ 4.3,转换单位
+    Cr = 0.028  # 归一化拉曼线性谱的回归斜率 1/W/km/THz
+    r = 1.2  # 光纤非线性系数 1/W/km
+    beta2 = -21.6  # 群速度色散参数
+    beta3 = 0.14  # 群速度线性斜率
+
+    Bd = 0.0125 * fs_N  # 需求带宽（THz）
+
+    ase = 0.0
+    sci = 0.0
+    xci = 0.0
+    xci_pre = 0.0
+    nli = 0.0
+    num = 0
+
+    for i in range(n):
+        for e in tail(i):
+            '''①已占用频隙数目、已有业务中心频率都少算末尾了，②Dl表示链路l上业务数目，③将spec_fd修改为业务起始频隙数'''
+            spec_used = []
+            spec_link = fdict[e]
+            for j in range(0, len(spec_link)):
+                if spec_link[j] == 1:
+                    spec_used.append(j)
+            spec_fd, demand_spec_num = spec_used_get(spec_used)
+            Dl = len(demand_spec_num) + 1
+            '''判断两点之间距离是否大于80km，如果大于，则需要划分跨度，跨度取值50~80
+            因此以Nl为跨度大小，跨度长度为距离/Nl均分'''
+            if w[e] > 120:
+                Nl = math.ceil(w[e] / 120)
+                span = w[e] / Nl
+            else:
+                Nl = 1
+                span = w[e]
+            '''计算噪声，考虑跨度影响'''
+            for k in range(flength):
+                # print(x[e])
+                # print(f[k, k])
+                '''确定(k,k+fs_N)个频隙块是否为空'''
+                spec_t = 0
+                for num in range(k, k + fs_N):
+                    spec_t = spec_t + spec_link[num]
+                '''(k,k+fs_N)个频隙块为空，再进行非线性噪声计算，否则会出现fd1-fd为0的情况  * 1e24'''
+                if spec_t == 0:
+                    fd = f_start - k * 0.0125 - fs_N / 2 * 0.0125
+                    theta = beta2 + 2 * 3.14 * beta3 * fd
+                    ase = ase + x[e] * f[k, k] * Nl * 2 * nsp * h * Bd * fd * (np.exp(alpha * span) - 1) * 1e24
+                    sci = x[e] * f[k, k] * Nl * (8 * r ** 2 * launch_power ** 3) / (
+                                81 * 3.14 * alpha ** 2 * theta * Bd ** 2) * (
+                                  ((2 * alpha - Dl * launch_power * Cr * fd) ** 2 - alpha ** 2) * math.asinh(
+                              3 * 3.14 * theta * Bd ** 2 / (2 * alpha)) / alpha
+                                  + (4 * alpha ** 2 - (2 * alpha - Dl * launch_power * Cr * fd) ** 2) * math.asinh(
+                              3 * 3.14 * theta * Bd ** 2 / (4 * alpha)) / (2 * alpha))
+
+                    for j in range(len(demand_spec_num)):
+                        '''fd1 = f_start - spec_fd[j] * 0.0125 - demand_spec_num * 0.0125/ 2, 这里不应该除2？，spec_fd[j]已经除2了'''
+                        Bd1 = demand_spec_num[j] * 0.0125
+                        fd1 = f_start - spec_fd[j] * 0.0125 - Bd1 / 2
+                        theta1 = (beta2 + 3.14 * beta3 * (fd + fd1)) * (fd1 - fd)
+                        eq1 = ((2 * alpha - Dl * launch_power * Cr * fd1) ** 2 - alpha ** 2) / alpha * math.atan(
+                            2 * 3.14 * 3.14 * theta1 * Bd / alpha)
+                        eq2 = (4 * alpha ** 2 - (2 * alpha - Dl * launch_power * Cr * fd1) ** 2) / (
+                                    2 * alpha) * math.atan(
+                            3.14 * 3.14 * theta1 * Bd / alpha)
+                        xci_pre = xci_pre + (eq1 + eq2) / theta1 * Bd1
+                    eq3 = (16 * r ** 2 * launch_power ** 3) / (81 * 3.14 * 3.14 * alpha ** 2)
+                    xci = x[e] * f[k, k] * Nl * eq3 * xci_pre
+                nli = nli + xci + sci
+            P_noise = ase + nli
+            num = num + 1
+
+    '''H_snr = (snr_t * P_noise - P + slack_value) ** 2   + slack_value'''
+    # - slack_value
+    H_snr = snr_t * P_noise - P
+    # H_snr = snr_t * P_noise-P
+
+    # 总目标函数（硬约束惩罚系数为100）0.01* + H_snr + 10000 * H_snr
+    # H = 1000 * (H_s + H_t) + 180 * H_i + H_c + 140 * H_f + 400 * H_fn + 10000 * H_snr
+    '''NSFNET网络最大距离是80km，与真实距离相比除以30倍，相应的目标函数参数'''
+    '''认为目标函数的约束应该按照所用网络最短路径的最大跳数来调整，目前目标函数约束项系数是NSFNET的[4, 3, 1, 0, 7]'''
+    H = 200 * (H_s + H_t) + 100 * H_i + H_c + 100 * H_f + 400 * H_fn + 20000 * H_snr
+    # H = 750 * (H_s + H_t) + 50 * H_i + H_c + 18 * H_f + 250 * H_fn
+    # 解析QUBO
+    H = kw.qubo.make(H)
+    # 转化为Ising模型
+    H_ising = kw.qubo.cim_ising_model(H)
+    # 提取Ising矩阵
+    matrix = H_ising.get_ising()["ising"]
+    import time
+    t1 = time.time()
+    # ------------------module3------------------------
+    # ------------禁忌搜索----------------------
+    # output = kw.classical.d2ts(
+    #        matrix,
+    #        10)
+    # ------------模拟退火----------------------
+    output = kw.classical.simulated_annealing(
+        matrix,
+        s=1,
+        T_init=100,
+        alpha=0.9,
+        T_min=0.01,
+        iterations_per_T=3000)
+    # ----------------------------------------------
+    # 使用CIM模拟器进行计算
+    # output = kw.cim.simulator(
+    #                 matrix,
+    #                 pump = 1.3,
+    #                 noise = 0.15,
+    #                 laps = 5000,
+    #                 dt = 0.1,
+    #                 normalization = 0.9,
+    #                 iterations = 1000)
+
+    # 对结果进行排序
+    opt = kw.sampler.optimal_sampler(matrix, output, bias=0, negtail_ff=False)
+    # 选取其中最好的解
+    cim_best = (opt[0][:1])[0]
+    # cim_best = opt[0][0]
+    # 如线性项变量为-1，进行反转
+    cim_best = cim_best * cim_best[-1]
+    # print(cim_best)
+    # 得到变量名的列表
+    vars = H_ising.get_variables()
+    # 代入spin向量，求得结果字典
+    sol_dict = kw.qubo.get_sol_dict(cim_best, vars)
+    # 代入硬约束验证是否为合法路径
+    H_s1_val = kw.qubo.get_val(H_s, sol_dict)
+    H_t1_val = kw.qubo.get_val(H_t, sol_dict)
+    H_i_val = kw.qubo.get_val(H_i, sol_dict)
+    H_f_val = kw.qubo.get_val(H_f, sol_dict)
+    H_fn_val = kw.qubo.get_val(H_fn, sol_dict)
+    H_snr_val = kw.qubo.get_val(H_snr, sol_dict)
+    H_val = kw.qubo.get_val(H, sol_dict)
+    P_noise_val = kw.qubo.get_val(P_noise, sol_dict)
+
+    # 代入H_c得到路径长度
+    H_c_val = kw.qubo.get_val(H_c, sol_dict)
+    # 获得x的数值字典
+    x_val = kw.qubo.get_dict_val(x, sol_dict)
+    f_val = kw.qubo.get_dict_val(f, sol_dict)
+    # 从中提取出值为1的变量脚标列表
+    one_list = [key for key, val in x_val.items() if val == 1]
+    fs_list = [key for key, val in f_val.items() if val == 1]
+    # resvisual(one_list)
+    # '''判断解空间是否包含最短路径'''
+    # find_best(one_list, pathbest)
+    '''恢复路径和频隙'''
+    if len(fs_list) == 0:
+        f = -1
+        print('未选出可用频隙！')
+    elif len(fs_list) > 1:
+        print('频隙选多了！')
+    else:
+        f = fs_list[0][0]
+        # print(f)
+        path = find_path(one_list, s, t)
+        # print(path)
+        if path != [] and path != None:
+            path = loopreduce(path)
+            # print(path)
+    t2 = time.time()
+    sa_time = t2-t1
+    '''输出各H值'''
+    print('H_s: {}'.format(H_s1_val))
+    print('H_t: {}'.format(H_t1_val))
+    print('H_i: {}'.format(H_i_val))
+    print('H_f: {}'.format(H_f_val))
+    print('H_fn:{}'.format(H_fn_val))
+    print('H_c: {}'.format(H_c_val))
+    print('H_snr:{}'.format(H_snr_val))
+    print('H: {}'.format(H_val))
+    print('P_noise: {}'.format(P_noise_val))
+
+    '''记录各H值'''
+    w_H_1 = 'H_s：' + str(H_s1_val) + '，H_t：' + str(H_t1_val) + '，H_i：' + str(H_i_val)
+    write_docx(w_H_1)
+    w_H_2 = 'H_f：' + str(H_f_val) + '，H_fn：' + str(H_fn_val)
+    write_docx(w_H_2)
+    w_H_3 = 'H_c：' + str(H_c_val) + '，H_snr：' + str(H_snr_val) + '，H：' + str(H_val)
+    write_docx(w_H_3)
+    write_docx('P_noise：' + str(P_noise_val))
+
+    return path, f, sa_time
+
+def MBRSA(s, t, fs_N, Delay_t, edge_list, w, n, f_list, fdict, flength, pathbest):
+    # 构建头、尾函数，即点i为头、尾的边的列表
+    def head(v):
+        return [(i, j) for (i, j) in edge_list if j == v]
+
+    def tail(u):
+        return [(i, j) for (i, j) in edge_list if i == u]
+
+    # 创建qubo变量矩阵
+    x = kw.qubo.qubo_dict(edge_list, 'x', kw.qubo.binary)
+    f = kw.qubo.qubo_dict(f_list, 'f', kw.qubo.binary)
+    # s的流平衡约束
+    H_s = (kw.qubo.sum(x[e] for e in tail(s)) - kw.qubo.sum(x[e] for e in head(s)) - 1) ** 2
+    # t的流平衡约束
+    H_t = (kw.qubo.sum(x[e] for e in tail(t)) - kw.qubo.sum(x[e] for e in head(t)) + 1) ** 2
+    # 其余点的流平衡约束
+    H_i = kw.qubo.sum(
+        (kw.qubo.sum(x[e] for e in tail(i)) - kw.qubo.sum(x[e] for e in head(i))) ** 2 for i in range(n) if
+        i not in [s, t])
+    # 频隙约束 函数range左闭右开
+    H_f = kw.qubo.sum(x[e] * fdict[e][m] * f[k, k] for i in range(n) for e in tail(i) for k in range(flength) for m in
+                      range(k, k + fs_N))
+    H_fn = (kw.qubo.sum(f[k, k] for k in range(flength)) - 1) ** 2
+    # 路径长度
+    H_c = kw.qubo.sum(w[e] * x[e] for e in edge_list)
+
+    # 时延约束 总时延小于业务d要求的最大时延Dd，转换为s进行计算
+    DT = kw.qubo.sum(w[e] * x[e] for e in edge_list) / 1000 * 5000  # 此时单位为ms 链路时延损耗
+    DF = kw.qubo.sum(x[e] for e in edge_list) * 45  # 此时单位为ms 转发时延
+    Delay_d = (DT + DF) / 1000  # 将 ms 转化为 s
+    '''建立时延约束函数H'''
+    H_delay = Delay_d - Delay_t
+
+    # 最小化占用频隙数
+    H_fs_min = kw.qubo.sum(fs_N * x[e] for e in edge_list)
+
+    # 信噪比约束 需求d所选路径的snr_d>=snr_t(信噪比阈值)，snr_d=P/P_noise
+    '''为将上述不等式QUBO建模，引入松弛变量slack_value，取值范围0~snr_t
+          先将slack_value取定值，后续需要引入二进制变量x代换，注意：需要将功率P和信噪比阈值snr_t，由数值形式转化为dB
+          暂时当slack_value取定值时，以数值形式表示
+    '''
+    # 信噪比阈值，发射功率P
+    '''BPSK调制格式m=1、BER=10E-3时，对应信噪比阈值为9dB，即snr=10log10(8)=9dB；
+       16QAM调制格式m=4、BER=10E-3时，对应信噪比阈值为18.6dB，即snr=10log10(72.443596)=18.6dB；'''
+    snr_t = 72.443596  # BPSK为8,9dB,16QAM 72.443596,18.6dB
+    launch_power = 0.001  # 0.001对应0dBm，0.177827941对应-7.5dBm,4dBm,2.5
+    P = launch_power
+    slack_value = 0.0001
+
+    # 噪声功率P_noise计算
+    # 参数设置
+    f_start = 196.04  # 从L波段的最高频率开始选，C波段，C波段频率范围：195.9~191.6，L波段频率范围：191.6~184.5（THz）待考证
+    nsp = 1.5  # 自发辐射系数 C波段1.25，L波段1.99
+    h = 6.626e-34  # Planck's constant
+    alpha = 0.2 / 4.3  # 光纤衰减系数 fiber attenuation(dB/km) 0.2/ 4.3,转换单位
+    Cr = 0.028  # 归一化拉曼线性谱的回归斜率 1/W/km/THz
+    r = 1.2  # 光纤非线性系数 1/W/km
+    beta2 = -21.6  # 群速度色散参数
+    beta3 = 0.14  # 群速度线性斜率
+
+    Bd = 0.0125 * fs_N  # 需求带宽（THz）
+
+    ase = 0.0
+    sci = 0.0
+    xci = 0.0
+    xci_pre = 0.0
+    nli = 0.0
+    num = 0
+
+    for i in range(n):
+        for e in tail(i):
+            '''①已占用频隙数目、已有业务中心频率都少算末尾了，②Dl表示链路l上业务数目，③将spec_fd修改为业务起始频隙数'''
+            spec_used = []
+            spec_link = fdict[e]
+            for j in range(0, len(spec_link)):
+                if spec_link[j] == 1:
+                    spec_used.append(j)
+            spec_fd, demand_spec_num = spec_used_get(spec_used)
+            Dl = len(demand_spec_num) + 1
+            '''判断两点之间距离是否大于80km，如果大于，则需要划分跨度，跨度取值50~80
+            因此以Nl为跨度大小，跨度长度为距离/Nl均分'''
+            if w[e] > 120:
+                Nl = math.ceil(w[e] / 120)
+                span = w[e] / Nl
+            else:
+                Nl = 1
+                span = w[e]
+            '''计算噪声，考虑跨度影响'''
+            for k in range(flength):
+                # print(x[e])
+                # print(f[k, k])
+                '''确定(k,k+fs_N)个频隙块是否为空'''
+                spec_t = 0
+                for num in range(k, k + fs_N):
+                    spec_t = spec_t + spec_link[num]
+                '''(k,k+fs_N)个频隙块为空，再进行非线性噪声计算，否则会出现fd1-fd为0的情况  * 1e24'''
+                if spec_t == 0:
+                    fd = f_start - k * 0.0125 - fs_N / 2 * 0.0125
+                    theta = beta2 + 2 * 3.14 * beta3 * fd
+                    ase = ase + x[e] * f[k, k] * Nl * 2 * nsp * h * Bd * fd * (np.exp(alpha * span) - 1) * 1e24
+                    sci = x[e] * f[k, k] * Nl * (8 * r ** 2 * launch_power ** 3) / (
+                                81 * 3.14 * alpha ** 2 * theta * Bd ** 2) * (
+                                  ((2 * alpha - Dl * launch_power * Cr * fd) ** 2 - alpha ** 2) * math.asinh(
+                              3 * 3.14 * theta * Bd ** 2 / (2 * alpha)) / alpha
+                                  + (4 * alpha ** 2 - (2 * alpha - Dl * launch_power * Cr * fd) ** 2) * math.asinh(
+                              3 * 3.14 * theta * Bd ** 2 / (4 * alpha)) / (2 * alpha))
+
+                    for j in range(len(demand_spec_num)):
+                        '''fd1 = f_start - spec_fd[j] * 0.0125 - demand_spec_num * 0.0125/ 2, 这里不应该除2？，spec_fd[j]已经除2了'''
+                        Bd1 = demand_spec_num[j] * 0.0125
+                        fd1 = f_start - spec_fd[j] * 0.0125 - Bd1 / 2
+                        theta1 = (beta2 + 3.14 * beta3 * (fd + fd1)) * (fd1 - fd)
+                        eq1 = ((2 * alpha - Dl * launch_power * Cr * fd1) ** 2 - alpha ** 2) / alpha * math.atan(
+                            2 * 3.14 * 3.14 * theta1 * Bd / alpha)
+                        eq2 = (4 * alpha ** 2 - (2 * alpha - Dl * launch_power * Cr * fd1) ** 2) / (
+                                    2 * alpha) * math.atan(
+                            3.14 * 3.14 * theta1 * Bd / alpha)
+                        xci_pre = xci_pre + (eq1 + eq2) / theta1 * Bd1
+                    eq3 = (16 * r ** 2 * launch_power ** 3) / (81 * 3.14 * 3.14 * alpha ** 2)
+                    xci = x[e] * f[k, k] * Nl * eq3 * xci_pre
+                nli = nli + xci + sci
+            P_noise = ase + nli
+            num = num + 1
+
+    '''H_snr = (snr_t * P_noise - P + slack_value) ** 2   + slack_value'''
+    # - slack_value
+    H_snr = snr_t * P_noise - P
+    # H_snr = snr_t * P_noise-P
+
+    # 总目标函数（硬约束惩罚系数为100）0.01* + H_snr + 10000 * H_snr
+    # H = 1000 * (H_s + H_t) + 180 * H_i + H_c + 140 * H_f + 400 * H_fn + 10000 * H_snr
+    '''NSFNET网络最大距离是80km，与真实距离相比除以30倍，相应的目标函数参数'''
+    '''认为目标函数的约束应该按照所用网络最短路径的最大跳数来调整，目前目标函数约束项系数是NSFNET的[4, 3, 1, 0, 7]'''
+    H = 200 * (H_s + H_t) + 100 * H_i + 100 * H_delay + 100 * H_f + 400 * H_fn + 5 * H_fs_min + 20000 * H_snr
+    H = 200 * (H_s + H_t) + 100 * H_i + H_c + 100 * H_f + 400 * H_fn + 10 * H_fs_min + 20000 * H_snr
+    H = 200 * (H_s + H_t) + 100 * H_i + H_c + 100 * H_f + 400 * H_fn + 20000 * H_snr
+    # H = 750 * (H_s + H_t) + 50 * H_i + H_c + 18 * H_f + 250 * H_fn
+    # 解析QUBO
+    H = kw.qubo.make(H)
+    # 转化为Ising模型
+    H_ising = kw.qubo.cim_ising_model(H)
+    # 提取Ising矩阵
+    matrix = H_ising.get_ising()["ising"]
+    import time
+    t1 = time.time()
+    # ------------------module3------------------------
+    # ------------禁忌搜索----------------------
+    # output = kw.classical.d2ts(
+    #        matrix,
+    #        10)
+    # ------------模拟退火----------------------
+    output = kw.classical.simulated_annealing(
+        matrix,
+        s=1,
+        T_init=100,
+        alpha=0.9,
+        T_min=0.01,
+        iterations_per_T=3000)
+    # ----------------------------------------------
+    # 使用CIM模拟器进行计算
+    # output = kw.cim.simulator(
+    #                 matrix,
+    #                 pump = 1.3,
+    #                 noise = 0.15,
+    #                 laps = 5000,
+    #                 dt = 0.1,
+    #                 normalization = 0.9,
+    #                 iterations = 1000)
+
+    # 对结果进行排序
+    opt = kw.sampler.optimal_sampler(matrix, output, bias=0, negtail_ff=False)
+    # 选取其中最好的解
+    cim_best = (opt[0][:1])[0]
+    # cim_best = opt[0][0]
+    # 如线性项变量为-1，进行反转
+    cim_best = cim_best * cim_best[-1]
+    # print(cim_best)
+    # 得到变量名的列表
+    vars = H_ising.get_variables()
+    # 代入spin向量，求得结果字典
+    sol_dict = kw.qubo.get_sol_dict(cim_best, vars)
+    # 代入硬约束验证是否为合法路径
+    H_s1_val = kw.qubo.get_val(H_s, sol_dict)
+    H_t1_val = kw.qubo.get_val(H_t, sol_dict)
+    H_i_val = kw.qubo.get_val(H_i, sol_dict)
+    H_f_val = kw.qubo.get_val(H_f, sol_dict)
+    H_fn_val = kw.qubo.get_val(H_fn, sol_dict)
+    H_fs_min_val = kw.qubo.get_val(H_fs_min, sol_dict)
+    H_delay_val = kw.qubo.get_val(H_delay, sol_dict)
+    Delay_d_val = kw.qubo.get_val(Delay_d, sol_dict)
+    H_snr_val = kw.qubo.get_val(H_snr, sol_dict)
+    H_val = kw.qubo.get_val(H, sol_dict)
+    P_noise_val = kw.qubo.get_val(P_noise, sol_dict)
+
+    # 代入H_c得到路径长度
+    H_c_val = kw.qubo.get_val(H_c, sol_dict)
+    # 获得x的数值字典
+    x_val = kw.qubo.get_dict_val(x, sol_dict)
+    f_val = kw.qubo.get_dict_val(f, sol_dict)
+    # 从中提取出值为1的变量脚标列表
+    one_list = [key for key, val in x_val.items() if val == 1]
+    fs_list = [key for key, val in f_val.items() if val == 1]
+    # resvisual(one_list)
+    # '''判断解空间是否包含最短路径'''
+    # find_best(one_list, pathbest)
+    '''恢复路径和频隙'''
+    if len(fs_list) == 0:
+        f = -1
+        print('未选出可用频隙！')
+    elif len(fs_list) > 1:
+        print('频隙选多了！')
+    else:
+        f = fs_list[0][0]
+        # print(f)
+        path = find_path(one_list, s, t)
+        # print(path)
+        if path != [] and path != None:
+            path = loopreduce(path)
+            # print(path)
+    t2 = time.time()
+    sa_time = t2-t1
+    '''输出各H值'''
+    print('H_s: {}'.format(H_s1_val))
+    print('H_t: {}'.format(H_t1_val))
+    print('H_i: {}'.format(H_i_val))
+    print('H_f: {}'.format(H_f_val))
+    print('H_fn:{}'.format(H_fn_val))
+    print('H_fs_min:{}'.format(H_fs_min_val))
+    print('H_c: {}'.format(H_c_val))
+    print('H_delay: {}'.format(H_delay_val))
+    print('Delay_d: {}'.format(Delay_d_val))
+    print('H_snr:{}'.format(H_snr_val))
+    print('H: {}'.format(H_val))
+    print('P_noise: {}'.format(P_noise_val))
+
+    '''记录各H值'''
+    w_H_1 = 'H_s：' + str(H_s1_val) + '，H_t：' + str(H_t1_val) + '，H_i：' + str(H_i_val)
+    write_docx(w_H_1)
+    w_H_2 = 'H_f：' + str(H_f_val) + '，H_fn：' + str(H_fn_val)+ '，H_fs_min：' + str(H_fs_min_val)
+    write_docx(w_H_2)
+    w_H_3 = 'H_c：' + str(H_c_val) + '，H_delay：' + str(H_delay_val) + '，Delay_d：' + str(Delay_d_val) + '，H_snr：' + str(H_snr_val) + '，H：' + str(H_val)
+    write_docx(w_H_3)
+    write_docx('P_noise：' + str(P_noise_val))
+
+    return path, f, sa_time
